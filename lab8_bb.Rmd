@@ -1,0 +1,154 @@
+---
+title: "Clustering"
+author: "Bri Baker"
+date: "2/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(janitor)
+library(palmerpenguins)
+library(NbClust)
+library(cluster)
+library(factoextra)
+library(dendextend)
+library(ggdendro)
+
+```
+
+## Part 1
+
+```{r}
+# Bill length versus depth exploratory plot:
+ggplot(penguins) +
+  geom_point(aes(x = bill_length_mm, 
+                 y = bill_depth_mm, 
+                 color = species,
+                 shape = sex),
+             size = 3,
+             alpha = 0.7) +
+  scale_color_manual(values = c("orange","cyan4","darkmagenta"))
+```
+
+```{r}
+# Flipper length versus body mass exploratory plot: 
+ggplot(penguins) +
+  geom_point(aes(x = flipper_length_mm, 
+                 y = body_mass_g, 
+                 color = species,
+                 shape = sex),
+             size = 3,
+             alpha = 0.7) +
+  scale_color_manual(values = c("orange","cyan4","darkmagenta"))
+```
+
+
+```{r}
+# How many clusters do you THINK there should be? 
+number_est <- NbClust(penguins[3:6], min.nc = 2, max.nc = 10, method = "kmeans")
+
+# Check out the results (just look at the first summary report):
+number_est
+
+```
+
+```{r}
+penguins_complete <- penguins %>% 
+  drop_na(bill_length_mm, bill_depth_mm, body_mass_g, flipper_length_mm)
+
+# Only keep the columns for the four size measurements, then SCALE them
+penguins_scale <- penguins_complete %>% 
+  select(ends_with("mm"), body_mass_g) %>% 
+  scale() # See ?scale for details on scaling
+```
+
+```{r}
+penguins_km <- kmeans(penguins_scale, 3) # kmeans specifying 3 groups to start
+```
+
+```{r}
+# Bind the cluster number to the original data used for clustering, so that we can see what cluster each penguin is assigned to
+penguins_cl <- data.frame(penguins_complete, cluster_no = factor(penguins_km$cluster))
+
+# Plot flipper length versus body mass, indicating which cluster each penguin is assigned to (but also showing the actual species):
+ggplot(penguins_cl) +
+  geom_point(aes(x = flipper_length_mm, 
+                 y = body_mass_g, 
+                 color = cluster_no,
+                 shape = species))
+
+ggplot(penguins_cl) +
+  geom_point(aes(x = bill_length_mm, 
+                 y = body_mass_g, 
+                 color = cluster_no,
+                 shape = species))
+```
+
+
+```{r}
+# Find the counts of each species assigned to each cluster, then pivot_wider() to make it a contingency table:
+penguins_cl %>% 
+  count(species, cluster_no) %>% 
+  pivot_wider(names_from = cluster_no, values_from = n) %>% 
+  rename('Cluster 1' = '1', 'Cluster 2' = '2', 'Cluster 3' = '3')
+```
+
+
+# Part 2
+
+```{r}
+wb_env <- read_csv("wb_env.csv")
+```
+
+```{r}
+# Only keep top 20 greenhouse gas emitters (for simplifying visualization here...)
+wb_ghg_20 <- wb_env %>% 
+  arrange(-ghg) %>% 
+  head(20)
+wb_scaled <- wb_ghg_20 %>% 
+  select(3:7) %>% 
+  scale()
+
+rownames(wb_scaled) <- wb_ghg_20$name
+```
+
+```{r}
+# Compute dissimilarity values (Euclidean distances):
+euc_distance <- dist(wb_scaled, method = "euclidean")
+```
+
+```{r}
+# Hierarchical clustering (complete linkage)
+hc_complete <- hclust(euc_distance, method = "complete" )
+
+# Plot it (base plot):
+plot(hc_complete, cex = 0.6, hang = -1)
+
+# Hierarchical clustering (single linkage)
+hc_single <- hclust(euc_distance, method = "single" )
+
+# Plot it (base plot):
+plot(hc_single, cex = 0.6, hang = -1)
+```
+
+
+```{r}
+# Convert to class dendrogram
+dend_complete <- as.dendrogram(hc_complete)
+dend_simple <- as.dendrogram(hc_single)
+
+# Make a tanglegram
+tanglegram(dend_complete, dend_simple)
+```
+
+```{r}
+ggdendrogram(hc_complete, 
+             rotate = TRUE) +
+  theme_minimal() +
+  labs(x = "Country")
+```
+
